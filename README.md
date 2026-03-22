@@ -6,6 +6,7 @@ It includes two tools:
     - This is the main tool using the [YGOPRO Api](https://ygoprodeck.com/) to get card information on the set *Justice Hunters* and calculates
     card pull probabilities using [Binomial Distribution](https://en.wikipedia.org/wiki/Binomial_distribution)
     - All data is put in the folder *data* and is organized by the following:
+    ```
         .
         └── data/
             ├── Card_by_Konami_Set_Id_and_rarity/
@@ -13,6 +14,7 @@ It includes two tools:
             │   ├── card_pulls_48_packs
             │   └── card_pulls_72_packs
             └── ...
+    ```
     - build with `go build ygo.go` and run with `./ygo`
 
 - genGraph.py

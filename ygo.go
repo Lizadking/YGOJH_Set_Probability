@@ -7,13 +7,14 @@ import(
 	"net/http"
 	"io/ioutil"
 	"encoding/json"
-	//"encoding/csv"
+	"encoding/csv"
 	"os"
     "bufio"
 	"sync"
 	"strings"
 	"path/filepath"
 	"gonum.org/v1/gonum/stat/distuv"
+	"strconv"
 )
 const rateLimit = time.Second / 20
 
@@ -138,7 +139,7 @@ func(obj *cardData) parseCardSets(list *cardContainer){
 		// Additional parsing of the rarity string to remove the () 
 		setStringRarity := strings.Replace(obj.Data[0].CardSets[set].SetRarityCode,"(","",-1)
 		setStringRarity = strings.Replace(setStringRarity,")","",-1)
-		//setStringRarity = setStringRarity[:len(setStringRarity)]
+		
 		if(setname == "JUSH" && parseCardType(cardType)){
 			temp :=  baseCard{name:obj.Data[0].Name, codeName: setCode, rarity : setRarity, stringRarity:setStringRarity}
 			list.appendTocardContainer(temp)
@@ -223,52 +224,173 @@ func BinomialProbability(succuess int,trials int,rairty float64)(float64,float64
 
 func generateData(card baseCard){
 
-	//var mu sync.Mutex
-	/* Just dump the files in main they can always be regenerated */
-
-	/* Critical Section 
-	mu.Lock()
-	fileName_24 := card.codeName + "_" + card.stringRarity +"_24"+ ".csv"
-	// create the file 
-	file, err := os.Create(fileName)
-	if err != nil{
-		fmt.Println(err)
-	}
-	mu.Unlock()
-	defer file.Close()
-	*/
-	
+	var chart24 [24][3]float64
+	var chart48 [48][3]float64
+	var chart72 [72][3]float64
 	cardParentDir := card.codeName + card.stringRarity
 	cardPath24 := card.codeName + card.stringRarity + "24.csv"
-	//cardPath48 := card.codeName + card.stringRarity + "48.csv"
-	//cardPath72 := card.codeName + card.stringRarity + "72.csv"
+	cardPath48 := card.codeName + card.stringRarity + "48.csv"
+	cardPath72 := card.codeName + card.stringRarity + "72.csv"
 
-	// Create the directory to write everything to 
-	if  err := os.Mkdir(filepath.Join("data",cardParentDir),os.ModePerm); err != nil{
-		fmt.Println(err)
-	}
-	
-	file, err := os.Create(filepath.Join("data",cardParentDir,cardPath24))
-	if err != nil{
-		fmt.Println(err)
-	}
-	fmt.Println(file)
-	defer file.Close()
-
-	//fmt.Printf("DEBUG DATA \n Card Name: %s \n Card Rarity: %f\n card rarity: %s\n", card.name, card.rarity,card.stringRarity)
-	// Run the simulation and populate the .csvs
-	/* Case A: succsess distribution from 24 packs */
-	/*
-	for i:=0;i<25;i++{
+	for i:=0;i<24;i++{
 		binomial_outcome, binomial_less, binomial_more := BinomialProbability(i,24.0,card.rarity)
-		fmt.Printf("%d: %f %f %f\n",i,binomial_outcome,binomial_less,binomial_more)
+		//fmt.Printf("%d: %f %f %f\n",i,binomial_outcome,binomial_less,binomial_more)
+		chart24[i][0] = binomial_outcome
+		chart24[i][1] = binomial_less
+		chart24[i][2] = binomial_more
 	}
-	/* Case B: succsess distribution from 48 packs /*
-
+	writeToFile24(cardParentDir,cardPath24,chart24)
+	//printChart(chart24,24)
+	/* Case B: succsess distribution from 48 packs */
+	for i:=0;i<48;i++{
+		binomial_outcome, binomial_less, binomial_more := BinomialProbability(i,48.0,card.rarity)
+		//fmt.Printf("%d: %f %f %f\n",i,binomial_outcome,binomial_less,binomial_more)
+		chart48[i][0] = binomial_outcome
+		chart48[i][1] = binomial_less
+		chart48[i][2] = binomial_more
+	}
+	//printChart48(chart48)
+	writeToFile48(cardParentDir,cardPath48,chart48)
 	/* Case C: succsess distribution from 72 packs */
+	for i:=0;i<72;i++{
+		binomial_outcome, binomial_less, binomial_more := BinomialProbability(i,72.0,card.rarity)
+		//fmt.Printf("%d: %f %f %f\n",i,binomial_outcome,binomial_less,binomial_more)
+		chart72[i][0] = binomial_outcome
+		chart72[i][1] = binomial_less
+		chart72[i][2] = binomial_more
+	}
+	writeToFile72(cardParentDir,cardPath72,chart72)
 	
 	
 }	
+
+func printChart(chart [24][3]float64){
+	for i:=0; i<24;i++{
+		fmt.Printf("%f,%f,%f\n",chart[i][0],chart[i][1],chart[i][2])
+	}
+}
+
+func printChart48(chart [48][3]float64){
+	for i:=0; i<48;i++{
+		fmt.Printf("%f,%f,%f\n",chart[i][0],chart[i][1],chart[i][2])
+	}
+}
+
+func printChart72(chart [72][3]float64){
+	for i:=0; i<72;i++{
+		fmt.Printf("%f,%f,%f\n",chart[i][0],chart[i][1],chart[i][2])
+	}
+}
+
+func writeToFile24(cardParentDir string, filename string, data [24][3]float64){
+
+	// Create the directory to write everything to 
+	var mu sync.Mutex
+	mu.Lock()
+	defer mu.Unlock()
+
+	if  err := os.Mkdir(filepath.Join("data",cardParentDir),os.ModePerm); err != nil{
+		fmt.Println(err)
+	}
+
+	file, err := os.Create(filepath.Join("data",cardParentDir,filename))
+	if err != nil{
+		fmt.Println(err)
+	}
+	
+	defer file.Close()
+
+	/* Matrix conversion to string slice for csv */ 
+	records :=  make([][]string, len(data))
+	
+	for i,row:= range data{
+		records[i] = make([]string,len(row))
+		for j,val :=range row{
+			records[i][j] = strconv.FormatFloat(val,'f',-1,32) // Limit this to 16-bits 
+		}
+	}
+
+	writer := csv.NewWriter(file)
+    defer writer.Flush()
+
+	if err := writer.WriteAll(records); err != nil {
+        fmt.Println(err)
+    }
+
+}
+
+func writeToFile48(cardParentDir string, filename string, data [48][3]float64){
+
+	// Create the directory to write everything to 
+	var mu sync.Mutex
+	mu.Lock()
+	defer mu.Unlock()
+
+	if  err := os.Mkdir(filepath.Join("data",cardParentDir),os.ModePerm); err != nil{
+		fmt.Println(err)
+	}
+
+	file, err := os.Create(filepath.Join("data",cardParentDir,filename))
+	if err != nil{
+		fmt.Println(err)
+	}
+	
+	defer file.Close()
+
+	/* Matrix conversion to string slice for csv */ 
+	records :=  make([][]string, len(data))
+	
+	for i,row:= range data{
+		records[i] = make([]string,len(row))
+		for j,val :=range row{
+			records[i][j] = strconv.FormatFloat(val,'f',-1,32) // Limit this to 16-bits 
+		}
+	}
+
+	writer := csv.NewWriter(file)
+    defer writer.Flush()
+
+	if err := writer.WriteAll(records); err != nil {
+        fmt.Println(err)
+    }
+
+}
+
+func writeToFile72(cardParentDir string, filename string, data [72][3]float64){
+
+	// Create the directory to write everything to 
+	var mu sync.Mutex
+	mu.Lock()
+	defer mu.Unlock()
+
+	if  err := os.Mkdir(filepath.Join("data",cardParentDir),os.ModePerm); err != nil{
+		fmt.Println(err)
+	}
+
+	file, err := os.Create(filepath.Join("data",cardParentDir,filename))
+	if err != nil{
+		fmt.Println(err)
+	}
+	
+	defer file.Close()
+
+		/* Matrix conversion to string slice for csv */ 
+	records :=  make([][]string, len(data))
+	
+	for i,row:= range data{
+		records[i] = make([]string,len(row))
+		for j,val :=range row{
+			records[i][j] = strconv.FormatFloat(val,'f',-1,32) // Limit this to 16-bits 
+		}
+	}
+
+	writer := csv.NewWriter(file)
+    defer writer.Flush()
+
+	if err := writer.WriteAll(records); err != nil {
+        fmt.Println(err)
+    }
+}
 
 func main(){
 	// Get the list of card IDs
@@ -311,10 +433,16 @@ func main(){
 	// Wait group 3: Data Generation and file writing 
 	/* Warning: This section will be doing concurrent file access
 	use mutexes to prevent data-races*/
-	/*
+	wait_group_data_processing :=  sync.WaitGroup{}
+
 	for element := range cardContainerList.item{
-		generateData(cardContainerList.item[element])
+		wait_group_data_processing.Add(1)
+		go func(){
+			defer wait_group_data_processing.Done()
+			generateData(cardContainerList.item[element])
+		}()
 	}
-		*/
-	generateData(cardContainerList.item[0])
+	wait_group_data_processing.Wait()
+	fmt.Println("All Data has been written")
+		
 }
